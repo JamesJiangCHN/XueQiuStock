@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"code.google.com/p/mahonia"
 	"compress/gzip"
 	"crypto/md5"
 	"encoding/hex"
@@ -34,6 +35,15 @@ type Stock struct {
 	deatil   StockDetail
 }
 
+type StockDeal struct {
+	date      string
+	time      string
+	code      string
+	name      string
+	deal      string
+	callPrice string
+}
+
 type StockDetail struct {
 	Symbol     string
 	Name       string
@@ -58,39 +68,71 @@ func NewXQUser() *XQUser {
 
 func main() {
 	fmt.Println("Hello Xueqiu!")
-
+	deals := readFile("D:\\20140309 历史成交查询.txt")
+	//fmt.Println(deals)
 	xqUser := NewXQUser()
-	xqUser.username = "********" //xqUser.telephone = ""
+	xqUser.username = "********"
+	//xqUser.telephone = "********"
 	xqUser.password = "********"
 	if xqUser.login() == true {
-		st := xqUser.getStock("国金证券")
-		postStr := "#雪球助手#"
-		postStr += " $" + st.Name + "(" + st.Code + ")$"
-		postStr += " 现价:" + st.deatil.Current
-		postStr += " 涨幅:" + st.deatil.Percentage + "%"
-		postStr += " 涨跌额" + st.deatil.Change
-		xqUser.post(postStr)
+		for _, deal := range deals {
+			st := xqUser.getStock(deal.code)
+			if st.Code == "" || st.Name == "" {
+				continue
+			}
+			postStr := "#雪球助手# 于"
+			postStr += deal.date + " " + deal.time
+			postStr += " " + deal.deal
+			postStr += " $" + st.Name + "(" + st.Code + ")$"
+			postStr += " 买入价" + deal.callPrice
+			postStr += " 现价为:" + st.deatil.Current
+			//postStr += " 涨幅:" + st.deatil.Percentage + "%"
+			//postStr += " 涨跌额" + st.deatil.Change
+			xqUser.post(postStr)
+			time.Sleep(6 * time.Second)
+		}
 	}
 
 }
 
-func readFile(fileName string) {
+func readFile(fileName string) (deals []StockDeal) {
+	s := []StockDeal{}
 	file, err := os.Open(fileName)
 	if err != nil {
 		fmt.Println("open File Error!")
-		return
+		return s
 	}
 	defer file.Close()
 	rd := bufio.NewReader(file)
-	i := 0
+	decoder := mahonia.NewDecoder("gb18030")
+	if decoder == nil {
+		fmt.Println("编码不存在!")
+		return s
+	}
+
 	for {
 		str, err := rd.ReadString('\n')
 		if err != nil {
+			fmt.Println(err)
 			break
 		}
-		fmt.Println(strconv.Itoa(i) + ":" + str)
-		i++
+		str = decoder.ConvertString(str)
+
+		if strings.HasPrefix(str, "20") {
+			strs := strings.Fields(str)
+			fmt.Println(strs)
+			var deal StockDeal
+			deal.date = strs[0]
+			deal.time = strs[1]
+			deal.code = strs[2]
+			deal.name = strs[3]
+			deal.deal = strs[4]
+			deal.callPrice = strs[5]
+			s = append(s, deal)
+
+		}
 	}
+	return s
 }
 
 func (user *XQUser) login() (b bool) {
@@ -100,7 +142,7 @@ func (user *XQUser) login() (b bool) {
 	tmd5 := md5.New()
 	tmd5.Write([]byte(user.password))
 	user.password = hex.EncodeToString(tmd5.Sum(nil))
-	fmt.Println("Md5 : " + user.password)
+	//fmt.Println("Md5 : " + user.password)
 	post_arg := url.Values{
 		"url":                {postUrl},
 		"data[username]":     {user.username},
@@ -137,7 +179,7 @@ func (user *XQUser) login() (b bool) {
 		fmt.Println("Fatal error ", err.Error())
 		os.Exit(0)
 	}
-	fmt.Println("Resp : " + strconv.Itoa(response.StatusCode))
+	//fmt.Println("Resp : " + strconv.Itoa(response.StatusCode))
 
 	if response.StatusCode == 200 {
 		body := getData(response)
@@ -162,7 +204,7 @@ func (user *XQUser) post(postTxt string) {
 		"data[title]":        {""},
 		"data[access_token]": {user.Access_token},
 		"data[_]":            {strconv.FormatInt(currentTime, 10)}}
-	fmt.Println(strings.NewReader(post_arg.Encode()))
+	fmt.Println(postUrl + postTxt)
 	client := new(http.Client)
 	reqest, err := http.NewRequest("POST", postUrl,
 		strings.NewReader(post_arg.Encode()))
@@ -191,7 +233,12 @@ func (user *XQUser) post(postTxt string) {
 		fmt.Println("Fatal error ", err.Error())
 		os.Exit(0)
 	}
-	//body := getData(response)
+
+	if response.StatusCode == 200 {
+		getData(response)
+	} else {
+		fmt.Println(response.Status)
+	}
 
 }
 
