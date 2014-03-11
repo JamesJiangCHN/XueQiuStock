@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -68,8 +69,8 @@ func NewXQUser() *XQUser {
 
 func main() {
 	fmt.Println("Hello Xueqiu!")
-	deals := readFile("D:\\20140309 历史成交查询.txt")
-	//fmt.Println(deals)
+	deals := readFile("D:\\table.xls")
+	fmt.Println(deals)
 	xqUser := NewXQUser()
 	xqUser.username = "********"
 	//xqUser.telephone = "********"
@@ -80,12 +81,13 @@ func main() {
 			if st.Code == "" || st.Name == "" {
 				continue
 			}
-			postStr := "#雪球助手# 于"
+			postStr := "#雪球交易助手# 于"
 			postStr += deal.date + " " + deal.time
+			postStr += " 以￥" + deal.callPrice
 			postStr += " " + deal.deal
 			postStr += " $" + st.Name + "(" + st.Code + ")$"
-			postStr += " 买入价" + deal.callPrice
-			postStr += " 现价为:" + st.deatil.Current
+
+			//postStr += " 现价为:" + st.deatil.Current
 			//postStr += " 涨幅:" + st.deatil.Percentage + "%"
 			//postStr += " 涨跌额" + st.deatil.Change
 			xqUser.post(postStr)
@@ -104,7 +106,7 @@ func readFile(fileName string) (deals []StockDeal) {
 	}
 	defer file.Close()
 	rd := bufio.NewReader(file)
-	decoder := mahonia.NewDecoder("gb18030")
+	decoder := mahonia.NewDecoder("gbk")
 	if decoder == nil {
 		fmt.Println("编码不存在!")
 		return s
@@ -112,24 +114,25 @@ func readFile(fileName string) (deals []StockDeal) {
 
 	for {
 		str, err := rd.ReadString('\n')
-		if err != nil {
-			fmt.Println(err)
-			break
-		}
-		str = decoder.ConvertString(str)
 
+		str = decoder.ConvertString(str)
+		fmt.Println(str)
 		if strings.HasPrefix(str, "20") {
 			strs := strings.Fields(str)
 			fmt.Println(strs)
 			var deal StockDeal
-			deal.date = strs[0]
-			deal.time = strs[1]
-			deal.code = strs[2]
-			deal.name = strs[3]
-			deal.deal = strs[4]
-			deal.callPrice = strs[5]
+			deal.date = strs[0]      //日期
+			deal.time = strs[1]      //时间
+			deal.code = strs[2]      //代码
+			deal.name = strs[3]      //名称
+			deal.deal = strs[4]      //买入或者卖出
+			deal.callPrice = strs[5] //成交价
 			s = append(s, deal)
 
+		}
+		if err == io.EOF || err != nil {
+			fmt.Println("Read Over")
+			break
 		}
 	}
 	return s
